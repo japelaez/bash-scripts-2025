@@ -1,0 +1,40 @@
+#!/bin/bash
+# Changes password Skips Slow / Unresponsive Servers
+USER="yourusername"
+OLD_PASS="OldPassword123"
+NEW_PASS="NewPassword456"
+SERVER_LIST="servers.txt"
+
+# Timeout values (adjust as needed)
+SSH_CONNECT_TIMEOUT=5      # seconds to wait for SSH to connect
+COMMAND_TIMEOUT=10         # max time allowed for passwd to run
+
+for SERVER in $(cat "$SERVER_LIST"); do
+    echo "Processing $SERVER ..."
+
+    # Run SSH + passwd with timeout protection
+    timeout $COMMAND_TIMEOUT sshpass -p "$OLD_PASS" \
+        ssh -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=$SSH_CONNECT_TIMEOUT \
+            -o BatchMode=no \
+            -o PreferredAuthentications=password \
+            -o LogLevel=ERROR \
+            "$USER@$SERVER" \
+            "echo -e \"$OLD_PASS\n$NEW_PASS\n$NEW_PASS\" | passwd" \
+            >/dev/null 2>&1
+
+    EXIT_CODE=$?
+
+    # Interpret timeout errors
+    if [ $EXIT_CODE -eq 124 ]; then
+        echo "TIMEOUT on $SERVER (skipped)"
+    elif [ $EXIT_CODE -eq 255 ]; then
+        echo "SSH ERROR on $SERVER (unreachable or refused)"
+    elif [ $EXIT_CODE -eq 0 ]; then
+        echo "SUCCESS on $SERVER"
+    else
+        echo "FAILED on $SERVER (exit code $EXIT_CODE)"
+    fi
+
+    echo "----------------------------------------"
+done
